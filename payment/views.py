@@ -7,7 +7,7 @@ from orders.models import Order
 from django.urls import reverse
 
 # Set Stripe API keys
-stripe.api_key = settings.STRIPE_API_KEY
+stripe.api_key = settings.STRIPE_SECRET_KEY
 stripe.api_version = settings.STRIPE_API_VERSION
 
 
@@ -36,17 +36,25 @@ def payment_process(request):
         # Add items to line_items for Stripe checkout session
         for item in order.items.all():
             if item.price and item.quantity:  # Ensure the item has a price and quantity
-                session_data['line_items'].append({
-                    'price_data': {
-                        'unit_amount': int(item.price * Decimal('100')),  # Convert price to cents
-                        'currency': 'usd',  # Make sure the currency is valid
-                        'product_data': {
-                            'name': item.product.name,
+                session_data['line_items'].append(
+                    {
+                        'price_data': {
+                            'unit_amount': int(item.price * Decimal('100')),  # Convert price to cents
+                            'currency': 'usd',  # Make sure the currency is valid
+                            'product_data': {
+                                'name': item.product.name,
+                            },
                         },
-                    },
-                    'quantity': int(item.quantity),
-                })
-
+                        'quantity': int(item.quantity),
+                    }
+                )
+        if order.coupon:
+            stripe_coupon = stripe.Coupon.create(
+                name = order.coupon.code,
+                percent_off =order.discount,
+                duration = 'once'
+            )
+            session_data['discounts'] = [{'coupon':stripe_coupon.id}]
         # If no line items were added, redirect to cart page
         if not session_data['line_items']:
             return redirect('cart')  # Or display an error message
